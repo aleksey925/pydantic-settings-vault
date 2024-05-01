@@ -5,10 +5,13 @@ pydantic-settings-vault
 
 > `pydantic-settings-vault` is a fork `pydantic-vault` with `pydantic 2.x` support.
 
-A simple extension to [pydantic-settings][pydantic-basesettings] that can retrieve secrets stored in [Hashicorp Vault][vault].
+A simple extension to [pydantic-settings][pydantic-basesettings] that can retrieve
+secrets stored in [Hashicorp Vault][vault].
 
-With pydantic-settings and pydantic-settings-vault, you can easily declare your configuration in a type-hinted class, and load configuration
-from environment variables or Vault secrets. pydantic-settings-vault will work the same when developing locally and when deploying in production.
+With pydantic-settings and pydantic-settings-vault, you can easily declare your
+configuration in a type-hinted class, and load configuration from different sources,
+including Vault secrets. pydantic-settings-vault will work the same when developing
+locally and when deploying in production.
 
 <!-- toc -->
 
@@ -40,21 +43,31 @@ from environment variables or Vault secrets. pydantic-settings-vault will work t
 
 ## Installation
 
+pip
+
 ```shell
 pip install pydantic-settings-vault
+```
 
-# or if you use Poetry or Pipenv
+poetry
+
+```shell
 poetry add pydantic-settings-vault
-pipenv install pydantic-settings-vault
 ```
 
 ## Getting started
 
-With `pydantic_settings.BaseSettings` class, you can easily "create a clearly-defined, type-hinted
-application configuration class" that gets its configuration from environment variables. It will work the same when
-developing locally and when deploying in production.
+It is a simple example that shows how to use `pydantic-settings-vault` with
+`pydantic-settings`. Here we created a simple `Settings` class with two fields:
+`username` and `password`, which will be loaded from a Vault. We also defined the
+`settings_customise_sources()` method to declare sources from which the settings
+will be loaded.
 
-You can create a normal `BaseSettings` class, and define the `settings_customise_sources()` method to load secrets from your Vault instance using the `VaultSettingsSource` class:
+Before running the code, you need to set the `VAULT_ADDR` and `VAULT_TOKEN` environment
+variables, or you can get an example of declaring configuration options inside
+the `Settings.model_config` dict.
+More information about the available settings and how they can be used can be found
+[here](#configuration).
 
 ```python
 import os
@@ -68,25 +81,17 @@ class Settings(BaseSettings):
     # The `vault_secret_path` is the full path (with mount point included) to the secret
     # The `vault_secret_key` is the specific key to extract from a secret
     username: str = Field(
-        ...,
         json_schema_extra={
             "vault_secret_path": "secret/data/path/to/secret",
             "vault_secret_key": "my_user",
         },
     )
     password: SecretStr = Field(
-        ...,
         json_schema_extra={
             "vault_secret_path": "secret/data/path/to/secret",
             "vault_secret_key": "my_password",
         },
     )
-
-    model_config = {
-        "vault_url": "https://vault.tld",
-        "vault_token": os.environ["VAULT_TOKEN"],
-        "vault_namespace": "your/namespace",  # Optional, pydantic-settings-vault supports Vault namespaces (for Vault Enterprise)
-    }
 
     @classmethod
     def settings_customise_sources(
@@ -109,8 +114,8 @@ class Settings(BaseSettings):
 
 settings = Settings()
 # These variables will come from the Vault secret you configured
-settings.username
-settings.password.get_secret_value()
+print(settings.username)
+print(settings.password.get_secret_value())
 
 
 # Now let's pretend we have already set the USERNAME in an environment variable
@@ -119,8 +124,24 @@ settings.password.get_secret_value()
 os.environ["USERNAME"] = "my user"
 
 settings = Settings()
-settings.username  # "my user", defined in the environment variable
-settings.password.get_secret_value()  # the value set in Vault
+print(settings.username)  # "my user", defined in the environment variable
+print(settings.password.get_secret_value())  # the value set in Vault
+```
+
+In case if you want to use the `Settings.model_config` dict to declare the
+configuration options, you can do it like this:
+
+```python
+...
+
+
+class Settings(BaseSettings):
+    ...
+    model_config = {
+        "vault_url": "https://vault.tld",
+        "vault_token": "my-vault-token",
+    }
+    ...
 ```
 
 ## Documentation
@@ -150,20 +171,31 @@ password: SecretStr = Field(
 
 ### Configuration
 
-You can configure the behaviour of pydantic-settings-vault in your `Settings.model_config` dict, or using environment variables:
+To be able to use `pydantic-settings-vault`, you need to do two things:
 
-| Settings name                   | Type                  | Required | Environment variable     | Description                                                                                                                                            |
-|---------------------------------|-----------------------|----------|--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `settings_customise_sources()`  |                       | **Yes**  | N/A                      | You need to implement this function to use Vault as a settings source, and choose the priority order you want                                          |
-| `vault_url`                     | `str`                 | **Yes**  | `VAULT_ADDR`             | Your Vault URL                                                                                                                                         |
-| `vault_namespace`               | `str \| None`         | No       | `VAULT_NAMESPACE`        | Your Vault namespace (if you use one, requires Vault Enterprise)                                                                                       |
-| `vault_auth_path`               | `str \| None`         | No       | `VAULT_AUTH_PATH`        | The path of the authentication method, such as /auth/{path}/login, if different from its default, is only supported by the JWT authentication method.  |
-| `vault_auth_mount_point`        | `str \| None`         | No       | `VAULT_AUTH_MOUNT_POINT` | The mount point of the authentication method, if different from its default mount point                                                                |
-| `vault_certificate_verify`      | `str \| bool \| None` | No       | `VAULT_CA_BUNDLE`        | The path to a CA bundle validating your Vault certificate, or `False` to disable verification (see [hvac docs][hvac-private-ca])                       |
+1. Declare the `settings_customise_sources` method in your `Settings` class. This
+method is used to declare the sources from which the settings will be loaded.
+2. Configure how `pydantic-settings-vault` should connect to your Vault server. You
+can do that through the `Settings.model_config` dict or environment variables.
 
-Environment variables override what has been defined in the `Settings.model_config` dict.
+> Environment variables have more priority and override what has been defined in the
+> `Settings.model_config` dict.
 
-You can also configure everything available in the original Pydantic `BaseSettings` class.
+Below is a list of all available settings:
+
+| Settings name              | Type                       | Required | Environment variable     | Description                                                                                                                                             |
+|----------------------------|----------------------------|----------|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `vault_url`                | `str`                      | **Yes**  | `VAULT_ADDR`             | Your Vault URL                                                                                                                                          |
+| `vault_token`              | `str \| SecretStr \| None` | No       | `VAULT_TOKEN`            | Vault token (see details [here](#Token))                                                                                                                |
+| `vault_namespace`          | `str \| None`              | No       | `VAULT_NAMESPACE`        | Your Vault namespace (if you use one, requires Vault Enterprise)                                                                                        |
+| `vault_auth_path`          | `str \| None`              | No       | `VAULT_AUTH_PATH`        | The path of the authentication method, such as `/auth/{path}/login`, if different from its default, is only supported by the JWT authentication method. |
+| `vault_auth_mount_point`   | `str \| None`              | No       | `VAULT_AUTH_MOUNT_POINT` | The mount point of the authentication method, if different from its default mount point                                                                 |
+| `vault_certificate_verify` | `str \| bool \| None`      | No       | `VAULT_CA_BUNDLE`        | The path to a CA bundle validating your Vault certificate, or `False` to disable verification (see [hvac docs][hvac-private-ca])                        |
+| `vault_role_id`            | `str \| None`              | No       | `VAULT_ROLE_ID`          | The role id for the Approle authentication method (see details [here](#approle))                                                                        |
+| `vault_secret_id`          | `str \| SecretStr \| None` | No       | `VAULT_SECRET_ID`        | The secret id for the Approle authentication method (see details [here](#approle))                                                                      |
+| `vault_kubernetes_role`    | `str \| None`              | No       | `VAULT_KUBERNETES_ROLE`  | The role for the Kubernetes authentication method (see details [here](#kubernetes))                                                                     |
+| `vault_jwt_role`           | `str \| None`              | No       | `VAULT_JWT_ROLE`         | The role for the JWT/OIDC authentication method (see details [here](#jwtoidc))                                                                          |
+| `vault_jwt_token`          | `str \| SecretStr \| None` | No       | `VAULT_JWT_TOKEN`        | The token for the JWT/OIDC authentication method (see details [here](#jwtoidc))                                                                         |
 
 ### Authentication
 
