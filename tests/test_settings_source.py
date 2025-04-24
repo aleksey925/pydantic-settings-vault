@@ -13,9 +13,13 @@ from pytest_mock import MockerFixture
 from typing_extensions import TypedDict
 
 try:
-    from pydantic_settings.sources import SettingsError  # type: ignore[attr-defined]
+    from pydantic_settings.sources import (  # type: ignore[attr-defined, unused-ignore, import-not-found, no-redef]
+        SettingsError,
+    )
 except ImportError:
-    from pydantic_settings.exceptions import SettingsError
+    from pydantic_settings.exceptions import (  # type: ignore[attr-defined, unused-ignore, import-not-found, no-redef]
+        SettingsError,
+    )
 
 
 class VaultDataWrapper(TypedDict):
