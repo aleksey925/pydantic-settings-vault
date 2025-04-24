@@ -12,7 +12,20 @@ from hvac.exceptions import VaultError
 from pydantic import SecretStr, TypeAdapter, ValidationError
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
-from pydantic_settings.sources import SettingsError, _annotation_is_complex
+
+try:
+    from pydantic_settings.sources import (  # type: ignore[attr-defined, unused-ignore]
+        SettingsError,
+        _annotation_is_complex,
+    )
+except ImportError:
+    # It's required for compatibility with pydantic-settings version 2.9 and above.
+    from pydantic_settings.exceptions import (  # type: ignore[import-not-found, unused-ignore, no-redef]
+        SettingsError,
+    )
+    from pydantic_settings.sources.utils import (  # type: ignore[import-not-found, unused-ignore, no-redef]
+        _annotation_is_complex,
+    )
 
 from pydantic_vault.entities import (
     Approle,

@@ -6,12 +6,20 @@ import pytest
 from hvac.exceptions import VaultError
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings
-from pydantic_settings.sources import SettingsError
 from pydantic_vault import VaultSettingsSource
 from pydantic_vault.entities import SettingsConfigDict
 from pytest import LogCaptureFixture
 from pytest_mock import MockerFixture
 from typing_extensions import TypedDict
+
+try:
+    from pydantic_settings.sources import (  # type: ignore[attr-defined, unused-ignore, import-not-found, no-redef]
+        SettingsError,
+    )
+except ImportError:
+    from pydantic_settings.exceptions import (  # type: ignore[attr-defined, unused-ignore, import-not-found, no-redef]
+        SettingsError,
+    )
 
 
 class VaultDataWrapper(TypedDict):
