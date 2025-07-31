@@ -1,40 +1,21 @@
 from __future__ import annotations
 
-import json.decoder
 import logging
 import os
+from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from hvac import Client as HvacClient
-from hvac.exceptions import VaultError
 from pydantic import SecretStr, TypeAdapter, ValidationError
-from pydantic.fields import FieldInfo
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from pydantic_settings import BaseSettings
+from pydantic_settings.sources import EnvSettingsSource
+from pydantic_settings.sources.utils import parse_env_vars
 
-try:
-    from pydantic_settings.sources import (  # type: ignore[attr-defined, unused-ignore]
-        SettingsError,
-        _annotation_is_complex,
-    )
-except ImportError:
-    # It's required for compatibility with pydantic-settings version 2.9 and above.
-    from pydantic_settings.exceptions import (  # type: ignore[import-not-found, unused-ignore, no-redef]
-        SettingsError,
-    )
-    from pydantic_settings.sources.utils import (  # type: ignore[import-not-found, unused-ignore, no-redef]
-        _annotation_is_complex,
-    )
-
-from pydantic_vault.entities import (
-    Approle,
-    AuthMethodParameters,
-    HvacClientParameters,
-    Kubernetes,
-    SettingsConfigDict,
-    VaultJwt,
-)
+from pydantic_vault.entities import (Approle, AuthMethodParameters,
+                                     HvacClientParameters, Kubernetes,
+                                     SettingsConfigDict, VaultJwt)
 
 logger = logging.getLogger("pydantic-vault")
 logger.addHandler(logging.NullHandler())
@@ -44,9 +25,6 @@ class PydanticVaultException(BaseException): ...
 
 
 class VaultParameterError(PydanticVaultException, ValueError): ...
-
-
-class _ContinueException(PydanticVaultException, Exception): ...
 
 
 def _format_vault_client_auth_log(
@@ -302,119 +280,59 @@ def _extract_jwt_token(config: SettingsConfigDict) -> VaultJwt | None:
     return vault_jwt
 
 
-class VaultSettingsSource(PydanticBaseSettingsSource):
-    def __init__(self, settings_cls: type[BaseSettings]) -> None:
-        super().__init__(settings_cls)
-
-    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
-        raise NotImplementedError  # pragma: no cover
-
-    def __call__(self) -> dict[str, Any]:
-        data: dict[str, Any] = {}
-
-        vault_client = _get_authenticated_vault_client(
-            cast(SettingsConfigDict, self.settings_cls.model_config)
+class VaultSettingsSource(EnvSettingsSource):
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        vault_secret_path: str | None = None,
+        case_sensitive: bool | None = None,
+        env_prefix: str | None = None,
+        env_nested_delimiter: str | None = None,
+        env_nested_max_split: int | None = None,
+        env_ignore_empty: bool | None = None,
+        env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
+    ) -> None:
+        self.vault_secret_path = vault_secret_path
+        super().__init__(
+            settings_cls,
+            case_sensitive,
+            env_prefix,
+            env_nested_delimiter,
+            env_nested_max_split,
+            env_ignore_empty,
+            env_parse_none_str,
+            env_parse_enums,
         )
-        if vault_client is None:
-            logger.warning("Could not find a suitable authentication method for Vault")
+
+    def _load_env_vars(self) -> Mapping[str, str | None]:
+        return self._read_vault_secret()
+    
+    def _read_vault_secret(self) -> Mapping[str, str | None]:
+        model_config = cast(SettingsConfigDict, self.settings_cls.model_config)
+        vault_client = _get_authenticated_vault_client(model_config)
+        vault_secret_path = self.vault_secret_path or model_config.get("vault_secret_path")
+        
+        if not vault_client or not vault_secret_path:
+            # If no vault client or secret path is provided, return an empty mapping
             return {}
+        
+        return self._static_read_vault_secret(
+            vault_client,
+            vault_secret_path=vault_secret_path,
+            case_sensitive=self.case_sensitive,
+            ignore_empty=self.env_ignore_empty,
+            parse_none_str=self.env_parse_none_str,
+        )
 
-        # Get secrets
-        for field_name, field_info in self.settings_cls.model_fields.items():
-            extra = self._get_field_extra(field_info)
-            vault_secret_path: str | None = extra.get("vault_secret_path")
-            vault_secret_key: str | None = extra.get("vault_secret_key")
-
-            if vault_secret_path is None:
-                logger.debug(f"Skipping field {field_name}")
-                continue
-
-            try:
-                vault_val: str | dict[str, Any] = self._get_vault_secret(
-                    vault_client=vault_client,
-                    vault_secret_path=vault_secret_path,
-                    vault_secret_key=vault_secret_key,
-                )
-            except _ContinueException:
-                continue
-
-            vault_val = self._deserialize_complex_type(
-                vault_val=vault_val,
-                field_info=field_info,
-                vault_secret_path=vault_secret_path,
-                vault_secret_key=vault_secret_key,
-            )
-            data[field_info.alias or field_name] = vault_val
-
-        return data
-
-    def _get_vault_secret(
-        self,
+    @staticmethod
+    def _static_read_vault_secret(
         vault_client: HvacClient,
-        vault_secret_path: str,
-        vault_secret_key: str | None,
-    ) -> str | dict[str, Any]:
-        try:
-            vault_api_response = vault_client.read(vault_secret_path)
-            if vault_api_response is None:
-                raise VaultError
-            vault_api_response = vault_api_response["data"]
-        except VaultError:
-            logger.info(f'could not get secret "{vault_secret_path}"')
-            raise _ContinueException
-
-        if vault_secret_key is None:
-            vault_val = vault_api_response.get("data", vault_api_response)
-        else:
-            resp = (
-                vault_api_response["data"]
-                if "data" in vault_api_response and vault_secret_key in vault_api_response["data"]
-                else vault_api_response
-            )
-            try:
-                vault_val = resp[vault_secret_key]
-            except KeyError:
-                logger.info(
-                    f'could not get key "{vault_secret_key}" in secret "{vault_secret_path}"'
-                )
-                raise _ContinueException
-
-        return vault_val
-
-    def _deserialize_complex_type(
-        self,
-        vault_val: str | dict[str, Any],
-        field_info: FieldInfo,
-        vault_secret_path: str,
-        vault_secret_key: str | None,
-    ) -> str | dict[str, Any]:
-        def decode_json(value: str) -> str | dict[str, Any]:
-            if field_info.annotation is not None and hasattr(
-                field_info.annotation, "model_validate_json"
-            ):
-                return field_info.annotation.model_validate_json(value)
-
-            try:
-                return json.loads(value)
-            except json.decoder.JSONDecodeError as exc:
-                raise ValueError from exc
-
-        is_field_complex = _annotation_is_complex(field_info.annotation, field_info.metadata)
-        if is_field_complex and not isinstance(vault_val, dict):
-            try:
-                vault_val = decode_json(vault_val)
-            except ValueError as e:
-                secret_full_path = vault_secret_path
-                if vault_secret_key is not None:
-                    secret_full_path += f":{vault_secret_key}"
-                raise SettingsError(f'error parsing JSON for "{secret_full_path}"') from e
-
-        return vault_val
-
-    def _get_field_extra(self, field_info: FieldInfo) -> dict[str, Any]:
-        extra = {}
-        if isinstance(field_info.json_schema_extra, dict):
-            extra.update(field_info.json_schema_extra)
-        elif callable(field_info.json_schema_extra):
-            field_info.json_schema_extra(extra)
-        return extra
+        vault_secret_path: str | None = None,
+        case_sensitive: bool = False,
+        ignore_empty: bool = False,
+        parse_none_str: str | None = None,
+    ) -> Mapping[str, str | None]:
+        vault_api_response: dict[str, str | None] = vault_client.read(vault_secret_path)
+        vault_vars = vault_api_response["data"]["data"]
+        return parse_env_vars(vault_vars, case_sensitive, ignore_empty, parse_none_str)
