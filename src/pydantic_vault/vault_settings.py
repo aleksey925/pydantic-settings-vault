@@ -379,7 +379,7 @@ class VaultSettingsSource(PydanticBaseSettingsSource):
                 )
                 raise _ContinueException
 
-        return vault_val
+        return cast("str | dict[str, Any]", vault_val)
 
     def _deserialize_complex_type(
         self,
@@ -392,10 +392,12 @@ class VaultSettingsSource(PydanticBaseSettingsSource):
             if field_info.annotation is not None and hasattr(
                 field_info.annotation, "model_validate_json"
             ):
-                return field_info.annotation.model_validate_json(value)
+                return cast(
+                    "str | dict[str, Any]", field_info.annotation.model_validate_json(value)
+                )
 
             try:
-                return json.loads(value)
+                return cast("str | dict[str, Any]", json.loads(value))
             except json.decoder.JSONDecodeError as exc:
                 raise ValueError from exc
 
