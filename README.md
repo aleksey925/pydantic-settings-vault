@@ -57,7 +57,7 @@ poetry add pydantic-settings-vault
 
 ## Getting started
 
-It is a simple example that shows how to use `pydantic-settings-vault` with
+This is a simple example that shows how to use `pydantic-settings-vault` with
 `pydantic-settings`. Here we created a simple `Settings` class with two fields:
 `username` and `password`, which will be loaded from a Vault. We also defined the
 `settings_customise_sources()` method to declare sources from which the settings
@@ -829,7 +829,7 @@ docker-compose up
 make setup-vault
 ```
 
-After that, you will have a Vault server running at `http://localhost:8200`, where you can authorize in two ways:
+After that, you will have a Vault server running at `http://localhost:8200`, where you can authorize in three ways:
 
 - using the root token (which is `token`)
 - using the JWT method (role=`jwt_role`, token=[link](./configs/vault/jwt_token.txt))
