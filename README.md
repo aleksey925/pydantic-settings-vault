@@ -617,7 +617,9 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-print(settings.credentials)  # { "root_user": "root", "root_password": "a_v3ry_s3cur3_p4ssw0rd" }
+print(
+    settings.credentials
+)  # { "root_user": "root", "root_password": "a_v3ry_s3cur3_p4ssw0rd" }
 ```
 
 You can also use a Pydantic `BaseModel` class to parse and validate the incoming secret:
@@ -716,7 +718,9 @@ class Settings(BaseSettings):
 settings = Settings()
 
 print(settings.db_creds.username)  # "generated-username-1"
-print(settings.db_creds.password.get_secret_value())  # "generated-password-for-username-1"
+print(
+    settings.db_creds.password.get_secret_value()
+)  # "generated-password-for-username-1"
 print(settings.db_creds_in_dict["username"])  # "generated-username-2"
 print(settings.db_creds_in_dict["password"])  # "generated-password-for-username-2"
 ```
@@ -771,6 +775,7 @@ print(settings.password.get_secret_value())  # "a_v3ry_s3cur3_p4ssw0rd"
           },
       )
 
+
   class Settings(BaseSettings):
       db: DatabaseConfig  # vault_secret_path inside DatabaseConfig is not processed
   ```
@@ -791,9 +796,7 @@ to load the whole secret at once, pydantic-settings-vault will only load the con
   and the settings class
   ```python
   class Settings(BaseSettings):
-      my_secret: dict = Field(
-          json_schema_extra={"vault_secret_path": "kv/my-secret"}
-      )
+      my_secret: dict = Field(json_schema_extra={"vault_secret_path": "kv/my-secret"})
   ```
   pydantic-settings-vault will try to load only the `data` value (`a very important piece of data`) in
   `my_secret`, which will fail validation from Pydantic because it is not a dict.
