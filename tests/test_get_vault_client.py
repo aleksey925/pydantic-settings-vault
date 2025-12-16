@@ -1,17 +1,18 @@
 import logging
 from pathlib import Path
-from typing import ClassVar, Union, cast
+from typing import ClassVar, cast
 from unittest import mock
 
 import pytest
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
-from pydantic_vault import VaultParameterError
-from pydantic_vault.entities import SettingsConfigDict
-from pydantic_vault.vault_settings import _get_authenticated_vault_client
 from pyfakefs.fake_filesystem import FakeFilesystem
 from pytest import LogCaptureFixture, MonkeyPatch
 from pytest_mock import MockerFixture
+
+from pydantic_vault import VaultParameterError
+from pydantic_vault.entities import SettingsConfigDict
+from pydantic_vault.vault_settings import _get_authenticated_vault_client
 
 
 @pytest.fixture
@@ -836,7 +837,7 @@ def test_get_vault_client_custom_ssl_priority(
 
 @pytest.mark.parametrize("jwt_token", ["fake-token", SecretStr("fake-token")])
 def test_get_authenticated_vault_client__get_client_with_auth_by_jwt(
-    mocker: MockerFixture, caplog: LogCaptureFixture, jwt_token: Union[str, SecretStr]
+    mocker: MockerFixture, caplog: LogCaptureFixture, jwt_token: str | SecretStr
 ) -> None:
     # arrange
     class Settings(BaseSettings):

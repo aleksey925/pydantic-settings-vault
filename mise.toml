@@ -1,0 +1,13 @@
+[[env]]
+_.python.venv = { path = "{{ get_env(name='VENV_DIR_PATH', default='.venv') }}", create = true }
+
+[[env]]
+_.source = { path = ".env.sh", tools = true }
+
+[[env]]
+_.file = { path = ".env", tools = true }
+
+[tools]
+python = "3.10"
+uv = "0.9.17"
+ruff = "0.14.9"

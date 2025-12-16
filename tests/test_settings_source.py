@@ -1,16 +1,17 @@
 import logging
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, cast
 from unittest.mock import MagicMock
 
 import pytest
 from hvac.exceptions import VaultError
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings
-from pydantic_vault import VaultSettingsSource
-from pydantic_vault.entities import SettingsConfigDict
 from pytest import LogCaptureFixture
 from pytest_mock import MockerFixture
 from typing_extensions import TypedDict
+
+from pydantic_vault import VaultSettingsSource
+from pydantic_vault.entities import SettingsConfigDict
 
 try:
     from pydantic_settings.sources import (  # type: ignore[attr-defined, unused-ignore, import-not-found, no-redef]
@@ -23,10 +24,10 @@ except ImportError:
 
 
 class VaultDataWrapper(TypedDict):
-    data: Dict[str, Any]
+    data: dict[str, Any]
 
 
-VaultStructure = Dict[str, VaultDataWrapper]
+VaultStructure = dict[str, VaultDataWrapper]
 
 
 def fake_vault(path: str) -> VaultDataWrapper:
@@ -85,7 +86,7 @@ def bypass_hvac_client(mocker: MockerFixture) -> MagicMock:
     mock_hvac_client = mock_hvac_client_constructor.return_value
     mock_hvac_client.read.side_effect = fake_vault
 
-    return mock_hvac_client
+    return cast(MagicMock, mock_hvac_client)
 
 
 def test_get_vault_secrets() -> None:
@@ -193,7 +194,7 @@ def test_get_secret_without_key() -> None:
             {"username": "doesn't matter", "password": "doesn't matter"},
             json_schema_extra={"vault_secret_path": "database/creds/db_role"},
         )
-        kvv2_secret: Dict[str, Any] = Field(
+        kvv2_secret: dict[str, Any] = Field(
             {}, json_schema_extra={"vault_secret_path": "secret/data/first_level_key"}
         )
 
@@ -251,7 +252,7 @@ def test_get_secrets_from_different_mount_points() -> None:
 def test_get_secret_jsonified() -> None:
     class JsonField(BaseModel):
         key: str
-        list: List[int]
+        list: list[int]
 
     class Settings(BaseSettings):
         json_field: JsonField = Field(  # type: ignore
@@ -273,7 +274,7 @@ def test_get_secret_jsonified() -> None:
 
 def test_get_secret_in_data_key() -> None:
     class Settings(BaseSettings):
-        kvv1_data_with_key: Dict[str, Any] = Field(
+        kvv1_data_with_key: dict[str, Any] = Field(
             {},
             json_schema_extra={
                 "vault_secret_path": "kv/secret_with_data_key",
@@ -282,14 +283,14 @@ def test_get_secret_in_data_key() -> None:
         )
         # FIXME: KV v1 secret with a `data` key and configured without a
         #        vault_secret_key is currently not supported
-        kvv2_data_with_key: Dict[str, Any] = Field(
+        kvv2_data_with_key: dict[str, Any] = Field(
             {},
             json_schema_extra={
                 "vault_secret_path": "secret/data/secret_with_data_key",
                 "vault_secret_key": "data",
             },
         )
-        kvv2_data_without_key: Dict[str, Any] = Field(
+        kvv2_data_without_key: dict[str, Any] = Field(
             {},
             json_schema_extra={
                 "vault_secret_path": "secret/data/secret_with_data_key",
@@ -311,7 +312,7 @@ def test_get_secret_in_data_key() -> None:
 
 def test_get_secret_bad_json() -> None:
     class Settings(BaseSettings):
-        bad_json: Dict[str, Any] = Field(
+        bad_json: dict[str, Any] = Field(
             {},
             json_schema_extra={
                 "vault_secret_path": "secret/data/bad_json",

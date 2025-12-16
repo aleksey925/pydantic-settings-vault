@@ -5,30 +5,22 @@ on:
     tags:
       - "*"
 
-env:
-  POETRY_VERSION: "1.7.1"
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.8"
+      - uses: actions/checkout@v5
 
-      - name: Install poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | POETRY_VERSION=$POETRY_VERSION python3
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Install tools
+        uses: jdx/mise-action@v3
 
       - name: Install dependencies
-        run: poetry install --no-interaction
-        env:
-          POETRY_VIRTUALENVS_CREATE: false
+        run: uv sync
+
+      - name: Build package
+        run: uv build
 
       - name: Release package
         env:
-          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
-        run: poetry publish --build
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: uv publish

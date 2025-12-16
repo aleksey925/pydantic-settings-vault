@@ -1,15 +1,14 @@
-[tool.poetry]
+[project]
 name = "pydantic-settings-vault"
 version = "2.1.1"
 description = "A simple extension to pydantic-settings that can retrieve secrets from Hashicorp Vault"
 authors = [
-  "Aleksey Petrunnik <petrunnik.a@gmail.com>",
-  "Thomas Gaudin <thomas.gaudin@centraliens-lille.org>",
+  { name = "Aleksey Petrunnik", email = "petrunnik.a@gmail.com" },
+  { name = "Thomas Gaudin", email = "thomas.gaudin@centraliens-lille.org" },
 ]
-license = "MIT"
+license = { text = "MIT" }
 readme = "README.md"
-repository = "https://github.com/aleksey925/pydantic-settings-vault/"
-documentation = "https://github.com/aleksey925/pydantic-settings-vault/"
+requires-python = ">=3.10"
 keywords = ["hashicorp", "vault", "hvac", "pydantic"]
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
@@ -21,71 +20,79 @@ classifiers = [
   "Topic :: Software Development :: Libraries",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Topic :: Internet",
-  "Topic :: Security"
+  "Topic :: Security",
 ]
-packages = [
-  { include = "pydantic_vault", from = "src" }
+dependencies = [
+  "pydantic>=2.1.1,<3",
+  "pydantic-settings>=2.0.2,<3",
+  "hvac>=0.10.6",
 ]
 
-[tool.poetry.urls]
+[project.urls]
+Repository = "https://github.com/aleksey925/pydantic-settings-vault/"
+Documentation = "https://github.com/aleksey925/pydantic-settings-vault/"
 "Bug Tracker" = "https://github.com/aleksey925/pydantic-settings-vault/issues"
-"Changelog" = "https://github.com/aleksey925/pydantic-settings-vault/blob/master/CHANGELOG.md"
+Changelog = "https://github.com/aleksey925/pydantic-settings-vault/blob/master/CHANGELOG.md"
 
-[tool.poetry.dependencies]
-python = "^3.8"
-pydantic = ">=2.1.1, <3"
-pydantic-settings = ">=2.0.2, <3"
-hvac = ">=0.10.6"
+[dependency-groups]
+dev = [
+  "mypy>=1.9.0",
+  "pytest>=7.4.0",
+  "pytest-mock>=3.14.0",
+  "pytest-cov>=5.0.0",
+  "pyfakefs>=5.8.0",
+  "pre-commit>=4.5.0",
+]
 
-[tool.poetry.group.dev.dependencies]
-mypy = "^1.9.0"
-pytest = "^7.4.0"
-pytest-mock = "^3.14.0"
-pytest-cov = "^5.0.0"
-pyfakefs = "^5.8.0"
-pre-commit = "^2.21.0"
+[tool.uv]
+default-groups = ["dev"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+include = ["src/pydantic_vault"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pydantic_vault"]
 
 [tool.ruff]
-target-version = "py38"
+target-version = "py310"
 line-length = 100
 
 [tool.ruff.lint]
 select = [
-    "A",    # flake8-builtins
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # pyflakes
-    "I",    # isort
-    "N",    # pep8-naming
-    "T20",  # flake8-print
-    "C90",  # flake8-complexity (mccabe)
-    "UP",   # pyupgrade
-    "RUF",  # ruff
+  "A",       # flake8-builtins
+  "E",       # pycodestyle errors
+  "W",       # pycodestyle warnings
+  "F",       # pyflakes
+  "I",       # isort
+  "N",       # pep8-naming
+  "T20",     # flake8-print
+  "C90",     # flake8-complexity (mccabe)
+  "UP",      # pyupgrade
+  "RUF",     # ruff
+  "S",       # flake8-bandit
+  "PLC0415", # import-outside-top-level
 ]
 ignore = [
-    "E501",  # line too long, handled by black
-    "A003",  # class attribute {name} is shadowing a python builtin
-    "N818",  # exception names should be named with an "Error" suffix
+  "E501", # line too long, handled by formatter
+  "A003", # class attribute {name} is shadowing a python builtin
+  "S101", # use of assert detected
+  "N818", # exception names should be named with an "Error" suffix
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]  # hardcoded passwords are fine in tests
+
 [tool.mypy]
-files = "src/pydantic_vault,tests"
-namespace_packages = true
-pretty = true
-plugins = "pydantic.mypy"
-mypy_path = "typings"
+python_version = "3.10"
+plugins = ["pydantic.mypy"]
+strict = true
+show_error_codes = true
+no_implicit_optional = false
 
-warn_unused_configs = true
-follow_imports = "silent"
-strict_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-disallow_any_generics = true
-check_untyped_defs = true
-no_implicit_reexport = true
-# for strict mypy: (this is the tricky one :-))
-disallow_untyped_defs = true
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[[tool.mypy.overrides]]
+module = "hvac.*"
+ignore_missing_imports = true
