@@ -758,6 +758,26 @@ print(settings.password.get_secret_value())  # "a_v3ry_s3cur3_p4ssw0rd"
 
 ## Known limitations
 
+- The `vault_secret_path` and `vault_secret_key` parameters are only processed for **top-level fields**
+  of your `Settings` class. If you use nested Pydantic models, the Vault parameters inside them will
+  be ignored:
+  ```python
+  class DatabaseConfig(BaseModel):
+      # This will NOT work - vault_secret_path is ignored in nested models!
+      username: str = Field(
+          json_schema_extra={
+              "vault_secret_path": "secret/data/db",
+              "vault_secret_key": "user",
+          },
+      )
+
+  class Settings(BaseSettings):
+      db: DatabaseConfig  # vault_secret_path inside DatabaseConfig is not processed
+  ```
+
+  **Workaround:** Define all Vault-sourced fields at the top level of your `Settings` class, or load
+  the entire secret as a dict/BaseModel (see [Retrieve a whole secret at once](#retrieve-a-whole-secret-at-once)).
+
 - On KV v1 secret engines, if your secret has a `data` key and you do not specify a `vault_secret_key`
 to load the whole secret at once, pydantic-settings-vault will only load the content of the `data` key.
   For example, with a secret `kv/my-secret`
