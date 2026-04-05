@@ -3,6 +3,12 @@
 pydantic-settings-vault
 =======================
 
+> [!TIP]
+> Consider [justconf](https://github.com/aleksey925/justconf) — it lets you define secret paths
+> via schema annotations at any nesting level, in any config files, or inline in strings.
+> Works alongside `pydantic-settings` without replacing it.
+> [Manual](https://github.com/aleksey925/justconf#using-with-pydantic-settings) how to use it with pydantic-settings.
+
 > `pydantic-settings-vault` is a fork `pydantic-vault` with `pydantic 2.x` support.
 
 A simple extension to [pydantic-settings][pydantic-basesettings] that can retrieve
