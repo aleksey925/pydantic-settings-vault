@@ -219,6 +219,49 @@ def test_get_secret_without_key() -> None:
     }
 
 
+def test_get_secrets_recursively_for_nested_models() -> None:
+    class ServiceCredentials(BaseModel):
+        username: str = Field(
+            "doesn't matter",
+            json_schema_extra={
+                "vault_secret_path": "secret/data/first_level_key",
+                "vault_secret_key": "username",
+            },
+        )
+        password: SecretStr = Field(  # type: ignore
+            "doesn't matter",
+            json_schema_extra={
+                "vault_secret_path": "secret/data/first_level_key",
+                "vault_secret_key": "password",
+            },
+        )
+
+    class Services(BaseModel):
+        primary: ServiceCredentials
+        secondary: ServiceCredentials
+
+    class Platform(BaseModel):
+        services: Services
+
+    class Settings(BaseSettings):
+        platform: Platform
+
+        model_config: ClassVar[SettingsConfigDict] = {
+            "vault_url": "https://vault.tld",
+            "vault_token": SecretStr("fake-token"),
+        }
+
+    vault_settings_dict = VaultSettingsSource(Settings)()
+    assert vault_settings_dict == {
+        "platform": {
+            "services": {
+                "primary": {"username": "kvv2_user", "password": "kvv2_password"},
+                "secondary": {"username": "kvv2_user", "password": "kvv2_password"},
+            }
+        }
+    }
+
+
 def test_get_secrets_from_different_mount_points() -> None:
     class Settings(BaseSettings):
         field_from_kvv1: str = Field(

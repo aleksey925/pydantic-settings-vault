@@ -5,7 +5,7 @@ import logging
 import os
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, get_args, get_origin
 
 from hvac import Client as HvacClient
 from hvac.exceptions import VaultError
@@ -310,8 +310,6 @@ class VaultSettingsSource(PydanticBaseSettingsSource):
         raise NotImplementedError  # pragma: no cover
 
     def __call__(self) -> dict[str, Any]:
-        data: dict[str, Any] = {}
-
         vault_client = _get_authenticated_vault_client(
             cast(SettingsConfigDict, self.settings_cls.model_config)
         )
@@ -319,34 +317,7 @@ class VaultSettingsSource(PydanticBaseSettingsSource):
             logger.warning("Could not find a suitable authentication method for Vault")
             return {}
 
-        # Get secrets
-        for field_name, field_info in self.settings_cls.model_fields.items():
-            extra = self._get_field_extra(field_info)
-            vault_secret_path: str | None = extra.get("vault_secret_path")
-            vault_secret_key: str | None = extra.get("vault_secret_key")
-
-            if vault_secret_path is None:
-                logger.debug(f"Skipping field {field_name}")
-                continue
-
-            try:
-                vault_val: str | dict[str, Any] = self._get_vault_secret(
-                    vault_client=vault_client,
-                    vault_secret_path=vault_secret_path,
-                    vault_secret_key=vault_secret_key,
-                )
-            except _ContinueException:
-                continue
-
-            vault_val = self._deserialize_complex_type(
-                vault_val=vault_val,
-                field_info=field_info,
-                vault_secret_path=vault_secret_path,
-                vault_secret_key=vault_secret_key,
-            )
-            data[field_info.alias or field_name] = vault_val
-
-        return data
+        return self._collect_model_secrets(self.settings_cls, vault_client)
 
     def _get_vault_secret(
         self,
@@ -420,3 +391,88 @@ class VaultSettingsSource(PydanticBaseSettingsSource):
         elif callable(field_info.json_schema_extra):
             field_info.json_schema_extra(extra)
         return extra
+
+    def _collect_model_secrets(
+        self, model_cls: type[BaseSettings] | type[Any], vault_client: HvacClient
+    ) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+        model_fields = getattr(model_cls, "model_fields", {})
+        for field_name, field_info in model_fields.items():
+            field_value = self._resolve_field_value(field_name, field_info, vault_client)
+            if field_value is _MISSING:
+                continue
+            data[field_info.alias or field_name] = field_value
+        return data
+
+    def _resolve_field_value(
+        self, field_name: str, field_info: FieldInfo, vault_client: HvacClient
+    ) -> Any:
+        current_value: Any = _MISSING
+        extra = self._get_field_extra(field_info)
+        vault_secret_path: str | None = extra.get("vault_secret_path")
+        vault_secret_key: str | None = extra.get("vault_secret_key")
+
+        if vault_secret_path is not None:
+            try:
+                vault_val: str | dict[str, Any] = self._get_vault_secret(
+                    vault_client=vault_client,
+                    vault_secret_path=vault_secret_path,
+                    vault_secret_key=vault_secret_key,
+                )
+            except _ContinueException:
+                vault_val = _MISSING
+
+            if vault_val is not _MISSING:
+                current_value = self._deserialize_complex_type(
+                    vault_val=vault_val,
+                    field_info=field_info,
+                    vault_secret_path=vault_secret_path,
+                    vault_secret_key=vault_secret_key,
+                )
+
+        nested_model = self._extract_nested_model(field_info.annotation)
+        if nested_model is None:
+            if current_value is _MISSING:
+                logger.debug(f"Skipping field {field_name}")
+            return current_value
+
+        nested_data = self._collect_model_secrets(nested_model, vault_client)
+        if not nested_data:
+            return current_value
+
+        if current_value is _MISSING:
+            return nested_data
+        if isinstance(current_value, dict):
+            return self._deep_merge_dict(current_value, nested_data)
+        return current_value
+
+    def _extract_nested_model(self, annotation: Any) -> type[Any] | None:
+        if annotation is None:
+            return None
+        if hasattr(annotation, "model_fields"):
+            return cast("type[Any]", annotation)
+
+        origin = get_origin(annotation)
+        if origin is None:
+            return None
+
+        for arg in get_args(annotation):
+            if arg is type(None):
+                continue
+            nested_model = self._extract_nested_model(arg)
+            if nested_model is not None:
+                return nested_model
+        return None
+
+    def _deep_merge_dict(self, primary: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(primary)
+        for key, fallback_value in fallback.items():
+            current_value = merged.get(key)
+            if isinstance(current_value, dict) and isinstance(fallback_value, dict):
+                merged[key] = self._deep_merge_dict(current_value, fallback_value)
+            elif key not in merged:
+                merged[key] = fallback_value
+        return merged
+
+
+_MISSING = object()
